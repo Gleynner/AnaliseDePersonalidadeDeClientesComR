@@ -1,0 +1,757 @@
+---
+title: "Análise de Personalidade de Clientes - EDA"
+author: "Gleynner Ghiotto"
+output:
+  html_document:
+    df_print: paged
+#    number_sections: true
+    toc: true
+#    toc_float: true
+    toc_depth: 3
+    theme: readable
+    highlight: pygments
+editor_options: 
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.align='center',comment = "")
+```
+
+```{r, include=FALSE}
+# Instalar/carregar pacotes
+
+
+# Lista de pacotes que serão utilizados:
+r_pkgs <- c('tidyverse','readxl','kableExtra', 'knitr','ggcorrplot','patchwork','lubridate','corrplot',
+            'factoextra','reshape2')
+
+# Instala o pacote pacman se ele não estiver instalado:
+if(!"pacman" %in% rownames(installed.packages())) install.packages("pacman")
+
+# Carrega os pacotes listados:
+pacman::p_load(char = r_pkgs)
+```
+
+```{r, include=FALSE}
+# Funções
+
+
+func_my_summary<- function(df){
+  return(
+    data.frame('Variavel'=df %>% names(), 
+               'Tipo'=df %>% summarise_all(typeof) %>%gather() %>% select(value) %>% pull(),
+               'N'=df %>% summarise_all(list( n = ~ n()))%>%gather() %>% select(value) %>% pull(),
+               'Missing'=df %>% map_df(function(x) sum(is.na(x))) %>%gather() %>% 
+                 select(value) %>% pull(),
+               'Missing_Percent'=df %>%map_df(function(x) sum(is.na(x))/length(x)*100) %>%
+                 gather() %>% select(value) %>% pull() %>% round(1),
+               'N_unique'=df %>%map_df(function(x) length(unique(x))) %>%gather() %>%
+                 select(value) %>% pull()
+    )
+  )
+}
+
+
+my_summary <- function(x, digits = 4){
+  resumo <- c(
+    #N        = length(x),
+    Min      = min(x, na.rm = T),
+    Q1       = unname(quantile(x, probs = 0.25, na.rm = T)),
+    Mediana  = median(x, na.rm = T),
+    Media    = mean(x, na.rm = T),
+    Q3       = unname(quantile(x, probs = 0.75, na.rm = T)),
+    Max      = max(x, na.rm = T),
+    DevPad   = sd(x, na.rm = T),
+    N_missing     = sum(is.na(x), na.rm = T)
+  )
+    return(round(resumo, digits = digits))
+}
+
+
+my_summary_all <- function(base, digits = 2){
+  cl <- sapply(base, function(x) class(x)[1])
+  nu <- cl[which(cl %in% c("numeric","integer"))]
+  sa <- sapply(base[,names(nu)], function(x) my_summary(x, digits = digits))
+  sa <- as.data.frame(sa)
+  return(sa)
+}
+
+
+round_df <- function(x, digits) {
+    # round all numeric variables
+    # x: data frame 
+    # digits: number of digits to round
+    numeric_columns <- sapply(x, mode) == 'numeric'
+    x[numeric_columns] <-  round(x[numeric_columns], digits)
+    x
+}
+
+```
+
+# Atributos
+
+- **Pessoas**:
+
+**ID:** Identificador único do cliente    <br>
+**Year_Birth:** Ano de nascimento do cliente   <br>
+**Education:** Nível de instrução do cliente    <br>
+**Marital_Status:** Estado civil do cliente    <br>
+**Income:** Renda familiar anual do cliente    <br>
+**Kidhome:** Número de crianças na residência do cliente    <br>
+**Teenhome:** Número de adolescentes na casa do cliente    <br>
+**Dt_Customer:** Data do cadastro do cliente na empresa    <br>
+**Recency:** Quantidade de dias desde a última compra do cliente    <br>
+**Complain:** 1 se o cliente reclamou nos últimos 2 anos, 0 caso contrário    <br>
+
+
+- **Produtos**:
+
+**MntWines:** valor gasto em produtos vitivinícolas nos últimos 2 anos    <br>
+**MntFruits:** valor gasto com frutas nos últimos 2 anos    <br>
+**MntMeatProducts:** Valor gasto com carnes nos últimos 2 anos    <br>
+**MntFishProducts:** Valor gasto em produtos pesqueiros nos últimos 2 anos    <br>
+**MntSweetProducts:** Valor gasto em produtos doces nos últimos 2 anos    <br>
+**MntGoldProds:** Valor gasto em produtos de ouro nos últimos 2 anos    <br>
+
+
+- **Promoção**:
+
+**NumDealsPurchases:** Número de compras feitas com desconto    <br>
+**AcceptedCmp1:** 1 se o cliente aceitou a oferta na 1ª campanha, 0 caso contrário    <br>
+**AcceptedCmp2:** 1 se o cliente aceitou a oferta na 2ª campanha, 0 caso contrário    <br>
+**AcceptedCmp3:** 1 se o cliente aceitou a oferta na 3ª campanha, 0 caso contrário    <br>
+**AcceptedCmp4:** 1 se o cliente aceitou a oferta na 4ª campanha, 0 caso contrário    <br>
+**AcceptedCmp5:** 1 se o cliente aceitou a oferta na 1ª campanha, 0 caso contrário    <br>
+**Response:** 1 se o cliente aceitou a oferta na última campanha, 0 caso contrário    <br>
+
+
+- **Local**:
+
+**NumWebPurchases:** Número de compras feitas pelo site da empresa    <br>
+**NumCatalogPurchases:** Número de compras feitas usando um catálogo    <br>
+**NumStorePurchases:** Número de compras feitas diretamente nas lojas    <br>
+**NumWebVisitsMonth:** Número de visitas ao site da empresa no último mês    <br>
+
+
+
+# Pré-processamento
+
+## Examinando o conjunto de dados
+
+```{r, comment="", fig.align='center'}
+dados <- read.csv("marketing_campaign.csv",
+                  header = TRUE, sep = "\t")
+head(dados, n=10)
+```
+
+```{r, comment=""}
+cat("O Data Frame original possui", dim(dados)[1],"linhas e", 
+    dim(dados)[2],"colunas")
+```
+
+```{r, comment=""}
+cat("Variáveis presentes no Data Frame: \n", colnames(dados), 
+    "\n Total de variáveis:", length(colnames(dados)), sep = " \n ")
+```
+
+
+## Detectando valores ausentes e valores distintos
+
+```{r, comment="", fig.align='center'}
+df_preprocess <- dados
+
+func_my_summary(df_preprocess)
+```
+
+```{r, comment=""}
+cat("Índices dos valores ausentes da variável Income: \n",
+    which(is.na(df_preprocess$Income)), 
+    "\n\nTotal de NA's:", 
+    sum(is.na(df_preprocess$Income)), sep = " " )
+```
+
+
+```{r, comment=""}
+# Eliminar valores NA da variável Income
+df_preprocess <- df_preprocess %>% drop_na(Income)
+
+cat("Quantidade de valores ausentes (NA) após eliminação:", sum(is.na(df_preprocess)))
+```
+
+
+## Detectando valores duplicados
+
+```{r, comment=""}
+cat("Quantidade de valores duplicados é:", sum(duplicated(df_preprocess)))
+```
+
+
+
+## Eliminar colunas Z_CostContact e Z_Revenue (por possuir o mesmo valor em todas as observações)
+
+```{r, comment=""}
+unique(df_preprocess$Z_CostContact) %>% length()
+unique(df_preprocess$Z_Revenue) %>% length()
+
+df_preprocess[,c("Z_CostContact","Z_Revenue")] <- NULL
+
+```
+
+
+# Análise Exploratória
+
+
+## Estatísticas descritivas
+
+```{r, comment="", fig.align='center'}
+df_eda <- df_preprocess
+
+my_summary_all(df_eda)
+```
+
+
+## Análises univariadas
+
+### ID (Identificador único do cliente)
+
+```{r, comment=""}
+summary(df_eda$ID)
+
+cat("\nQuantidade de valores distintos em ID é igual a", 
+    length(unique(df_eda$ID)),"em um total de",dim(df_eda)[1],
+    "linhas, isto é, os valores de ID são únicos.\n\nQuantidade de valores duplicados:",
+    sum(duplicated(df_eda$ID)))
+```
+
+
+### Year_Birth (Ano de nascimento do cliente)
+
+```{r, comment="", fig.align='center'}
+summary(df_eda$Year_Birth)
+boxplot(df_eda$Year_Birth,horizontal = T)
+```
+
+Criar coluna com a idade de cada cliente:
+
+```{r, comment="", fig.align='center'}
+# Calcular a idade do cliente
+df_eda$Idade <- round(year(Sys.Date()) - df_eda$Year_Birth, digits = 2)
+
+summary(df_eda$Idade)
+boxplot(df_eda$Idade,horizontal = T)
+# Percebe-se clientes com idade muito elevada
+```
+
+Eliminar clientes com idade acima de 120 anos
+
+```{r, comment="", fig.align='center'}
+df_eda <- df_eda[df_eda$Idade < 120,]
+
+summary(df_eda$Idade)
+```
+
+Verificar as 10 idades mais frequentes:
+
+```{r, comment=""}
+# as dez idades mais frequentes
+head(df_eda %>% count(Idade) %>% arrange(desc(n)),10)
+
+```
+
+### Education (Nível de instrução do cliente)
+
+Classificar o nível educacional nas classes Undergraduate e Postgraduate
+
+```{r, comment=""}
+df_eda$Education[df_eda$Education %in% c("Basic","2n Cycle")] <- "Undergraduate"
+df_eda$Education[df_eda$Education %in% c("Graduation","Master","PhD")] <- "Postgraduate"
+
+cat("As categorias existentes em Education são:\n",
+    unique(df_eda$Education),sep = "\n")
+```
+
+
+Verificar o quantidade/percentual de clientes em cada classe:
+
+```{r, comment="", fig.align='center'}
+# Quantidade de Undergraduate e Postgraduate
+n_educacao <- df_eda %>% count(Education) %>% 
+  mutate(percentage= n/dim(df_eda)[1],
+         percent_lab = paste0(round(percentage*100,2),"%")) 
+
+ggplot(data = n_educacao) +
+  geom_col(aes(x = Education, y = n), width =0.5) +
+  labs(x = "Educação",y = "Quantidade") +
+  theme_bw() +
+  geom_text(aes(x = Education, y = n,label=percent_lab), vjust = -0.5) +
+  scale_y_continuous(limits = c(0,2100), labels = scales::comma)
+```
+
+Criar variável dummy para representar as classes Undergraduate (com 0) e Postgraduate (com 1):
+```{r}
+df_eda$Education_dummy <- ifelse(df_eda$Education == "Undergraduate", 0, 1)
+
+```
+
+
+### Marital_Status (Estado civil do cliente)
+
+```{r, comment=""}
+unique(df_eda$Marital_Status)
+```
+
+Classificar estado civil em Alone e In Couple:
+
+```{r, comment=""}
+# Classes da variável Marital_Status
+df_eda$Marital_Status[df_eda$Marital_Status %in% c("Single","Divorced","Absurd","Widow","YOLO")] <- "Alone"
+df_eda$Marital_Status[df_eda$Marital_Status %in% c("Married","Together")] <- "In couple"
+
+cat("As classificações para o estado civil são: \n",
+    unique(df_eda$Marital_Status)[1],
+    unique(df_eda$Marital_Status)[2], sep = "\n")
+```
+
+Verificar a quantidade de clientes que vivem sozinhas e com companheiros:
+
+```{r, comment="", fig.align='center'}
+# Quantidade de Alone e In couple
+n_marital <- df_eda %>% count(Marital_Status) %>% 
+  mutate(percentage = n/dim(df_eda)[1],
+          percent_lab = paste0(round(percentage*100,2),"%"))
+
+ggplot(data = n_marital) +
+  geom_col(aes(x = Marital_Status, y = n), width =0.5) +
+  labs(x = "Estado civil",y = "Quantidade") +
+  theme_bw() +
+  geom_text(aes(x = Marital_Status, y = n,label=percent_lab), vjust = -0.5) +
+  scale_y_continuous(limits = c(0,1500))
+```
+
+
+Criar variável dummy para representar as classes Alone (com 0) e In couple (com 1):
+```{r}
+df_eda$Marital_Status_dummy <- ifelse(df_eda$Marital_Status == "Alone", 0, 1)
+
+```
+
+
+### Income (Renda familiar anual do cliente)
+
+```{r, comment="", fig.align='center'}
+summary(df_eda$Income)
+
+par(mfrow = c(1,2))
+boxplot(df_eda$Income, horizontal = T,xlab = "Renda anual")
+hist(df_eda$Income,breaks = 100, main = NULL,xlab = "Renda anual",ylab=NULL)
+
+# Outlier!!! 
+```
+
+Eliminar valor outlier!
+
+```{r, comment=""}
+df_eda <- df_eda[df_eda$Income < 600000,]
+```
+
+
+```{r, comment="", fig.align='center'}
+summary(df_eda$Income)
+
+par(mfrow = c(1,2))
+boxplot(df_eda$Income, horizontal = T, xlab = "Renda anual")
+hist(df_eda$Income,breaks = 100,xlab = "Renda anual", main = NULL,ylab=NULL)
+```
+
+
+### Kidhome e Teenhome (Número de crianças e adolescentes na residência do cliente)
+
+```{r, comment="", fig.align='center'}
+unique(df_eda$Kidhome)
+unique(df_eda$Teenhome)
+```
+
+```{r, comment="", fig.align='center'}
+percent_kidhome <- as.data.frame(prop.table(table(df_eda$Kidhome)))
+
+g1 <- ggplot(data = percent_kidhome) +
+  geom_col(aes(x = Var1, y = Freq), width =0.5) +
+  labs(x="Nº de crianças",y = "Percentual", title = "kidhome") +
+  scale_y_continuous(limits = c(0,1), labels = scales::percent) +
+  geom_text(aes(x = Var1, y = Freq,label=paste0(round(Freq,2)*100,"%")), vjust = -0.5) +
+  theme_bw()
+
+percent_Teenhome <- as.data.frame(prop.table(table(df_eda$Teenhome)))
+g2 <- ggplot(data = percent_Teenhome) +
+  geom_col(aes(x = Var1, y = Freq), width =0.5) +
+  labs(x="Nº de adolescentes",y = "Percentual", title = "Teenhome") +
+  scale_y_continuous(limits = c(0,1), labels = scales::percent) +
+  geom_text(aes(x = Var1, y = Freq,label=paste0(round(Freq,2)*100,"%")), vjust = -0.5) +
+  theme_bw()
+
+(g1+g2)
+```
+
+Calcular o número de filhos por cliente e verificar o valor percentual de cada uma das quantidades: 
+
+```{r, comment=""}
+df_eda$N_Children <- df_eda$Kidhome + df_eda$Teenhome 
+percent_N_Children <- as.data.frame(prop.table(table(df_eda$N_Children)))
+
+ggplot(data = percent_N_Children) +
+  geom_col(aes(x = Var1, y = Freq), width =0.5) +
+  labs(x="Nº de filhos",y = "Percentual") +
+  scale_y_continuous(limits = c(0,1),labels = scales::percent_format(scale = 100,accuracy =5L)) +
+  geom_text(aes(x = Var1, y = Freq,label=paste0(round(Freq,2)*100,"%")), vjust = -0.5) +
+  theme_bw()
+```
+
+
+### Dt_Customer (Data do cadastro do cliente na empresa)
+
+```{r, comment=""}
+df_eda$Dt_Customer <- as_date(dmy(df_eda$Dt_Customer))
+class(df_eda$Dt_Customer)
+
+summary(df_eda$Dt_Customer)
+```
+
+Quantidade de dias desde a data da inscrição na empresa até o dia atual:
+
+```{r, comment="", fig.align='center'}
+df_eda$Dt_inscricao_ate_atual <- Sys.Date() - df_eda$Dt_Customer
+df_eda$Dt_inscricao_ate_atual <- as.numeric(df_eda$Dt_inscricao_ate_atual)
+
+summary(df_eda$Dt_inscricao_ate_atual)
+```
+
+
+### Recency (Quantidade de dias desde a última compra do cliente)
+
+```{r, comment="", fig.align='center'}
+summary(df_eda$Recency)
+```
+
+### MntWines, MntFruits, MntMeatProducts, MntFishProducts, MntSweetProducts e MntGoldProds
+
+```{r, comment=""}
+summary(df_eda$MntWines)
+summary(df_eda$MntFruits)
+summary(df_eda$MntMeatProducts)
+summary(df_eda$MntFishProducts)
+summary(df_eda$MntSweetProducts)
+summary(df_eda$MntGoldProds)
+```
+
+Calcular a quantidade total gasto em produtos:
+
+```{r, comment=""}
+df_eda$Gasto_total <- df_eda$MntWines + df_eda$MntFruits + df_eda$MntMeatProducts +
+  df_eda$MntFishProducts + df_eda$MntSweetProducts + df_eda$MntGoldProds
+
+summary(df_eda$Gasto_total)
+```
+
+
+```{r, comment="", fig.align='center'}
+par(mfrow = c(1,2))
+boxplot(df_eda$Gasto_total,horizontal = T,xlab ="Gasto total")
+hist(df_eda$Gasto_total, breaks = 100,xlab ="Gasto total", main = NULL)
+```
+
+
+### NumDealsPurchases (Número de compras feitas com desconto)
+
+```{r, comment="", fig.align='center'}
+summary(df_eda$NumDealsPurchases)
+
+par(mfrow = c(1,2))
+boxplot(df_eda$NumDealsPurchases, horizontal = T,xlab ="Compras com desconto")
+hist(df_eda$NumDealsPurchases, breaks = 100,xlab ="Compras com desconto", main = NULL)
+```
+
+### NumWebPurchases, NumCatalogPurchases e NumStorePurchases
+
+Número total de compras por cliente:
+
+```{r, comment=""}
+df_eda$Numero_compras <- df_eda$NumWebPurchases + df_eda$NumCatalogPurchases + df_eda$NumStorePurchases
+
+summary(df_eda$Numero_compras)
+```
+
+
+```{r, comment="", fig.align='center'}
+par(mfrow = c(1,2))
+boxplot(df_eda$Numero_compras,xlab ="Nº de compras por cliente", horizontal = T)
+hist(df_eda$Numero_compras, breaks = 100,xlab ="Nº de compras por cliente", main = NULL)
+```
+
+Verificar a quantidade de compras feitas em cada local de venda:
+
+```{r, fig.align='center'}
+local <- c("Web","Catalogo","Store")
+valor <- c(sum(df_eda$NumWebPurchases),
+           sum(df_eda$NumCatalogPurchases),
+           sum(df_eda$NumStorePurchases))
+local_vendas <- data.frame(local,valor)
+local_vendas$local <- factor(local_vendas$local, levels = c("Catalogo","Web","Store"))
+
+ggplot(data = local_vendas) +
+  geom_col(aes(x = reorder(local,-valor), y = valor), width = 0.5) +
+  labs(x = "Local de compra",y = "Quantidade total comprada em cada local") +
+  theme_bw() + geom_text(aes(x = local, y = valor,label=valor), vjust = -0.5) +
+  scale_y_continuous(limits = c(0,14000))
+```
+
+### NumWebVisitsMonth (Número de visitas ao site da empresa no último mês)
+
+```{r, comment="", fig.align='center'}
+summary(df_eda$NumWebVisitsMonth)
+```
+
+### AcceptedCmp1, AcceptedCmp2, AcceptedCmp3, AcceptedCmp4, AcceptedCmp5 e Response
+
+```{r, comment=""}
+unique(df_eda$AcceptedCmp1)
+unique(df_eda$AcceptedCmp2)
+unique(df_eda$AcceptedCmp3)
+unique(df_eda$AcceptedCmp4)
+unique(df_eda$AcceptedCmp5)
+unique(df_eda$Response)
+
+```
+
+Calcular o número de campanhas aceitas por cada cliente:
+
+```{r, comment="", fig.align='center'}
+df_eda$Num_campaign_acc <- df_eda$AcceptedCmp1 + df_eda$AcceptedCmp2 +
+  df_eda$AcceptedCmp3 + df_eda$AcceptedCmp4 + df_eda$AcceptedCmp5 + df_eda$Response
+
+
+
+n_campaign_acc <- df_eda %>% count(Num_campaign_acc) %>% mutate(perc_camp = n/sum(n),
+                                                                 perc_lab = paste0(round(perc_camp*100,2),"%"))
+n_campaign_acc$Num_campaign_acc <-  as.factor(n_campaign_acc$Num_campaign_acc)
+
+ggplot(data = n_campaign_acc) +
+  geom_col(aes(x = Num_campaign_acc, y = n), width = 0.5) +
+  labs(x = "Campanhas aceitas",y = "Quantidade") +
+  theme_bw() + geom_text(aes(x = Num_campaign_acc, y = n,label=perc_lab), vjust = -0.5) +
+  scale_y_continuous(limits = c(0,2000))
+```
+
+### Complain (1 se o cliente reclamou nos últimos 2 anos, 0 caso contrário)
+
+```{r, comment=""}
+unique(df_eda$Complain)
+
+cat("Foram feitas um total de",sum(df_eda$Complain),"reclamações.")
+```
+
+```{r, comment="", fig.align='center'}
+n_complain <- df_eda %>% count(Complain)
+n_complain$Complain <-  as.factor(n_complain$Complain)
+
+ggplot(data = n_complain) +
+  geom_col(aes(x = Complain, y = n), width = 0.5) +
+  labs(x = "Reclamações",y = "Quantidade") +
+  geom_text(aes(x = Complain, y = n,label=n), vjust = -0.5) +
+  theme_bw()
+```
+
+
+
+## Calcular o valor médio por compra
+
+```{r, comment=""}
+# Eliminas valor de compra igual a zero (6 linhas)
+df_eda <- df_eda[df_eda$Numero_compras > 0,]  
+
+df_eda$Valor_medio_de_compra <- round(df_eda$Gasto_total/df_eda$Numero_compras, 
+                                       digits = 2)
+```
+
+
+## Análise Bivariadas
+
+### Total de gasto por nível educacional
+
+```{r, comment="", fig.align='center'}
+Gst_niv_educ <- df_eda %>% group_by(Education) %>% summarise(Gasto_Edu = sum(Gasto_total)) %>% 
+  mutate(perc_gasto = Gasto_Edu/sum(Gasto_Edu),
+         perc_lab = paste0(round(perc_gasto*100,2),"%"))
+
+ggplot(data = Gst_niv_educ) +
+  geom_col(aes(x = Education,y = Gasto_Edu), width = 0.5) +
+  labs(x="Nível educacional",y = "Valor/percentual de gasto") +
+  theme_bw() + geom_text(aes(x = Education,y = Gasto_Edu,label=perc_lab), vjust = -0.5) +
+  scale_y_continuous(limits = c(0,1300000), breaks = seq(0,1300000,250000),
+                     labels = scales::comma)
+ 
+```
+
+
+### Valor médio de compra por nível educacional
+
+```{r}
+ggplot(data = df_eda %>% group_by(Education) %>% 
+  summarise(media = mean(Valor_medio_de_compra))) +
+  geom_col(aes(x = Education, y = media),linewidth=1.8) +
+  labs(x=NULL,y="Valor médio de compra") +
+  geom_text(aes(x = Education,y = media,label= paste0(round(media,1))), vjust = -0.5) +
+  theme_bw() 
+```
+
+
+### Total de gasto por estado civil
+
+```{r, comment="", fig.align='center'}
+Gst_est_civ <- df_eda %>% group_by(Marital_Status) %>% summarise(Gasto_Marital = sum(Gasto_total)) %>% 
+  mutate(perc_gasto = Gasto_Marital/sum(Gasto_Marital),
+         perc_lab = paste0(round(perc_gasto*100,2),"%"))
+
+ggplot(data = Gst_est_civ) +
+  geom_col(aes(x = Marital_Status,y = Gasto_Marital), width = 0.5) +
+  labs(x="Estado civil",y = "Valor/percentual de gasto") +
+  theme_bw()  + geom_text(aes(x = Marital_Status,y = Gasto_Marital,label=perc_lab), vjust = -0.5) +
+  scale_y_continuous(limits = c(0,1000000), labels = scales::comma)
+```
+
+### Valor médio de compra por estado civil
+
+```{r}
+ggplot(data = df_eda %>% group_by(Marital_Status) %>% 
+  summarise(media = mean(Valor_medio_de_compra))) +
+  geom_col(aes(x = Marital_Status, y = media),linewidth=1.8) +
+  labs(x=NULL,y="Valor médio de compra") +
+  geom_text(aes(x = Marital_Status,y = media,label= paste0(round(media,1))), vjust = -0.5) +
+  theme_bw() 
+```
+
+
+### Total de gasto por número de filhos
+
+```{r, comment="", fig.align='center'}
+Gst_n_Children <- df_eda %>% group_by(N_Children) %>% summarise(Gasto_Child = sum(Gasto_total)) %>% 
+  mutate(perc_gasto = Gasto_Child/sum(Gasto_Child),
+         perc_lab = paste0(round(perc_gasto*100,2),"%"))
+Gst_n_Children$N_Children <- factor(Gst_n_Children$N_Children)
+
+ggplot(data = Gst_n_Children) +
+  geom_col(aes(x = N_Children,y = Gasto_Child), width = 0.5) +
+  labs(x = "Nº de filhos",y = "Valor/percentual de gasto") +
+  theme_bw()  + geom_text(aes(x = N_Children,y = Gasto_Child,label=perc_lab), vjust = -0.5) +
+  scale_y_continuous(limits = c(0,800000), labels = scales::comma)
+```
+
+
+### Valor médio de compra por número de filhos
+
+```{r}
+ggplot(data = df_eda %>% group_by(N_Children) %>% 
+  summarise(media = mean(Valor_medio_de_compra))) +
+  geom_col(aes(x = N_Children, y = media),linewidth=1.8) +
+  labs(x=NULL,y="Valor médio de compra") +
+  geom_text(aes(x = N_Children,y = media,label= paste0(round(media,1))), vjust = -0.5) +
+  theme_bw() 
+```
+
+
+### Total de gasto dado o número de campanhas aceitas
+
+```{r, comment="", fig.align='center'}
+# gasto pelo número de campanhas aceitas
+Gst_campaign_acc <- df_eda %>% 
+  group_by(Num_campaign_acc) %>% summarise(Gasto_camp_acc = sum(Gasto_total)) %>% 
+  mutate(perc_gasto_camp = round((Gasto_camp_acc/sum(Gasto_camp_acc))*100,2),
+         perc_lab = paste0(perc_gasto_camp,"%"))
+
+ggplot(data = Gst_campaign_acc) +
+  geom_col(aes(x = Num_campaign_acc,y = Gasto_camp_acc), width = 0.5) +
+  labs(x = "Campanhas aceitas",y = "Valor/percentual de gasto") +
+  theme_bw() + geom_text(aes(x = Num_campaign_acc,y = Gasto_camp_acc,label = perc_lab), vjust = -0.5) +
+  scale_y_continuous(limits = c(0,1000000), breaks = c(0,200000,400000,600000,800000,1000000),
+                     labels = scales::comma) +
+  scale_x_continuous(limits = c(-0.5,5.5), breaks = seq(0,5,1))
+```
+
+
+### Valor médio de compra dado o número de campanhas aceitas
+
+```{r}
+ggplot(data = df_eda %>% group_by(Num_campaign_acc) %>% 
+  summarise(media = mean(Valor_medio_de_compra))) +
+  geom_col(aes(x = Num_campaign_acc, y = media),size=1.8) +
+  labs(x="Campanhas aceitas",y="Valor médio de compra") +
+  geom_text(aes(x = Num_campaign_acc,y = media,label= paste0(round(media,1))), vjust = -0.5) +
+  scale_x_continuous(limits = c(-0.5,5.5), breaks = seq(0,5,1)) +
+  theme_bw() 
+```
+
+
+### Quantidade de observações por classes 
+
+```{r}
+df_eda %>% group_by(Education) %>% count()
+
+df_eda %>% group_by(Marital_Status) %>% count()
+
+df_eda %>% group_by(N_Children) %>% count()
+```
+
+
+### Dispersão do valor médio de compra pela renda anual do cliente
+
+- Disciminando por Nível Educacional
+
+```{r, comment="", fig.align='center'}
+ggplot(data = df_eda) +
+  geom_point(aes(x = Income, y = Valor_medio_de_compra, color = Education),alpha=0.5,size=1.8) +
+  labs(x="Renda anual",y="Valor médio de compra") +
+  theme_bw() +
+  scale_colour_manual("Nível educacional", values = c("darkorchid","deepskyblue1"))
+```
+
+- Disciminando por quantidade de filhos
+
+```{r, comment="", fig.align='center'}
+df_eda$N_Children <- factor(df_eda$N_Children)
+
+ggplot(data = df_eda) +
+  geom_point(aes(x = Income, y = Valor_medio_de_compra, color = N_Children),alpha=0.5,size=1.8) +
+  labs(x="Renda anual",y="Valor médio por compra") +
+  theme_bw() +
+  scale_colour_manual("Nº de filhos", values = c("deepskyblue1","antiquewhite3","forestgreen","darkorchid"))
+```
+
+
+### Dispersão do Gasto total em compras pela renda anual do cliente
+
+- Disciminando por quantidade de filhos
+
+```{r, comment="", fig.align='center'}
+ggplot(data = df_eda) +
+  geom_point(aes(x = Income, y =  Gasto_total, color = N_Children),alpha=0.5,size=1.8) +
+  labs(x="Renda anual",y="Gasto total") +
+  theme_bw() +
+  scale_colour_manual("Nº de filhos", values = c("deepskyblue1","antiquewhite3","forestgreen","darkorchid"))
+```
+
+## Correlação entre variáveis 
+
+```{r, comment="", fig.align='center', fig.width= 7, fig.height=6.5}
+df_eda$N_Children <- as.integer(df_eda$N_Children)
+
+df_cor <- df_eda[,sapply(df_eda, mode) == "numeric"] %>% 
+  select(-c("ID","Dt_Customer","Recency","Complain",
+            "AcceptedCmp1","AcceptedCmp2","AcceptedCmp3",
+            "AcceptedCmp4","AcceptedCmp5","NumDealsPurchases")) %>% scale()
+
+correlacao <- cor(df_cor)
+corrplot(correlacao, type = "upper", order = "hclust", 
+         tl.col = "black", tl.srt = 45, tl.cex = 0.7)
+```
+
+

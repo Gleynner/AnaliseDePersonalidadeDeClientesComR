@@ -1,0 +1,142 @@
+---
+title: "Análise de Personalidade de Clientes - PCA"
+author: "Gleynner Ghiotto"
+output:
+  html_document:
+    df_print: paged
+#    number_sections: true
+    toc: true
+#    toc_float: true
+    toc_depth: 3
+    theme: readable
+    highlight: pygments
+editor_options: 
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.align='center',comment = "")
+```
+
+<style> body {text-align: justify} </style>
+
+```{r, message = FALSE}
+library(tidyverse)
+library(factoextra)
+```
+
+
+# Carregar dados
+
+Carregar conjunto de dados trabalhado na etapa anterior, isto é, no arquivo em que foi feito o pré-processamento e análise exploratória de dados (EDA).
+
+```{r, comment=""}
+df_eda <- read.csv("df_eda_marketing_campaign.csv",
+                  header = TRUE)
+head(df_eda, n=10)
+```
+
+
+
+# Aplicação de Componentes Principais
+
+A Análise de Componentes Principais (PCA, sigla em inglês) é uma técnica estatística multivariada amplamente utilizada para a redução de dimensionalidade e extração de informações em conjuntos de dados de alta dimensionalidade, desenvolvida por Karl Pearson em 1901.
+
+O PCA transforma um conjunto de variáveis correlacionadas em um conjunto de variáveis não correlacionadas, chamadas de componentes principais. Esses componentes são combinações lineares das variáveis originais e são ordenados de acordo com a quantidade de variação que explicam nos dados. Desta forma, o primeiro componente principal captura a maior parte da variação, o segundo componente principal captura a segunda maior parte, e assim por diante.
+
+Além da redução de dimensionalidade, a PCA também é útil para identificar padrões, detectar outliers, pré-processar dados antes de aplicar outros métodos estatísticos e lidar com multicolinearidade, que ocorre quando as variáveis independentes estão altamente correlacionadas.
+
+
+```{r}
+df_pca <- df_eda[,sapply(df_eda, mode) == "numeric"] 
+df_pca$Class_VMC <- ifelse(df_pca$Valor_medio_de_compra >= 49.42, "Melhores clientes", 
+                                    ifelse(df_pca$Valor_medio_de_compra < 49.42 & 
+                                             df_pca$Valor_medio_de_compra >= 29.92,
+                                           "Intermediarios", "Clientes ruins"))
+
+df_pca$Class_VMC <- factor(df_pca$Class_VMC, levels = c("Melhores clientes","Intermediarios", "Clientes ruins"))
+
+df_pca_select <- df_pca %>% 
+  select(-c("ID","Year_Birth","Dt_inscricao_ate_atual","Recency","Complain","AcceptedCmp1",
+   "AcceptedCmp2","AcceptedCmp3","AcceptedCmp4","AcceptedCmp5","Response","NumDealsPurchases","Teenhome",
+   "Num_campaign_acc","MntGoldProds","MntWines","Education_dummy","Marital_Status_dummy"))
+# "MntFruits","MntFishProducts","MntSweetProducts","NumStorePurchases","Idade"
+#nomes <- colnames(df_pca_select)
+```
+
+
+```{r}
+pca_out <- prcomp(df_pca_select %>% select(-"Class_VMC"), scale=TRUE)
+summary(pca_out)
+```
+
+
+```{r}
+fviz_pca_biplot(pca_out, repel = F,
+                col.var = "black", # cor das variáveis
+                col.ind = as.factor(df_pca_select$Class_VMC), 
+                alpha.ind = 0.9,
+                pointsize = 1,
+                addEllipses = F,
+                palette  = c('royalblue3','chartreuse4','darkgoldenrod1'),
+                legend.title = "Classes de MPG",
+                title  = "Biplot",
+                ggtheme = theme_bw()
+) + scale_shape_manual(values=c(19,19,19))
+
+
+fviz_pca_var(pca_out,
+             col.var = "contrib", # Cor por contribuições para o PC
+             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
+             repel = F,
+             ggtheme = theme_bw(),
+             legend.title = "Cont.Var")
+```
+
+Conforme explicitado na imagem acima, o 3° quadrante é composto pelos clientes que possuem maiores valores médios de compra (marcados no biplot com a cor azul). Conforme este quadrante, os clientes com maiores valor médio de compra, foram mais impactados por possuirem gastos elevados com produtos cárneos, doces, peixes e frutas.
+
+O 2° quadrante apresenta uma mistura entre clientes bons e intermediários. Na região de maior concentração de pontos azuis, representando os bons clientes (que gastam mais), observa-se que eles são impactados por possuirem maior renda anual (income) e compram mais por meio do uso do catálogo. Todavia, os clientes que tendem a comprar maior quantidade de produtos costumam frequentar a loja física, porém, isso não significa que são os que gastão mais. Observa-se ainda que, a medida em que aumenta a concentração de pontos verdes (clientes intermediários) nesse quadrante, tais clientes tendem a comprar mais usando o site da empresa, e clientes com idade mais avançadas tendem a diminuir o valor médio por compra.
+
+No 1° e 4° quadrantes, os clientes com menores médias de compra são clientes com maior número de crianças/filhos, e esses clientes tendem a fazer mais visitas ao website da empresa. 
+
+
+- Variáveis por quadrante:
+
+```{r}
+# The rotation matrix provides the principal component loadings;
+loadings <- pca_out$rotation %>% as.data.frame()
+loadings <- loadings[,c("PC1","PC2")]
+
+loadings$Quadrante <-
+  ifelse(
+    loadings$PC1 >= 0 &
+      loadings$PC2 >= 0,
+    1,
+    ifelse(
+      loadings$PC1 <= 0 &
+        loadings$PC2 >= 0,
+      2,
+      ifelse(
+        loadings$PC1 <= 0 &
+          loadings$PC2 <= 0,
+        3,
+        4
+      )
+    )
+  )
+
+
+rbind(loadings[loadings$Quadrante == "1",] %>% arrange(desc(PC1)),
+      loadings[loadings$Quadrante == "2",] %>% arrange(PC1),
+      loadings[loadings$Quadrante == "3",] %>% arrange(PC1),
+      loadings[loadings$Quadrante == "4",] %>% arrange(desc(PC1))
+)
+
+```
+
+
+```{r}
+cor(pca_out$x[,1:2], df_pca_select %>% select(-"Class_VMC") %>% scale()) %>% t()
+```
+
+
