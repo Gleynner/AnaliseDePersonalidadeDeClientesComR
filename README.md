@@ -9,7 +9,7 @@ O conjunto de dados contem informações detalhadas dos clientes, como, ano de n
 - Análise de componentes principais, para auxiliar na identificação de padrões e ajudar a identificar as características que são mais influentes no comportamento dos clientes.
 - Análise de agrupamento usando o algoritmo K-Means, na busca por grupos de clientes com comportamentos, preferências e características semelhantes.
 
-As fases do projeto podem ser visualizadas por meio dos link abaixo:
+As fases do projeto podem ser visualizadas por meio dos links abaixo:
 
 [Análise Exploratória de Dados](https://bit.ly/3C7dRk5)   
 
