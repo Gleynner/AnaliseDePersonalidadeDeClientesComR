@@ -1,11 +1,18 @@
 # Analise de Personalidade de Clientes
 
+O Customer Personality Analysis visa analisar e segmentar os clientes de uma empresa para entender melhor seus comportamentos e preferências. A análise da personalidade do cliente ajuda as empresas a adaptarem seus produtos e serviços às necessidades específicas de diferentes segmentos de clientes. Isso permite a criação de campanhas de marketing mais eficazes e direcionadas, aumentando a satisfação e a retenção dos clientes.
 
+O conjunto de dados contem informações detalhadas dos clientes, como, ano de nascimento, nível educacional, estado civil, renda anual, quantidade de filhos, dentre outras variáveis de consumo e campanhas. Para obter informações sobre o comportamento dos clientes contidos na base de dados passamos pelas seguintes etapas:
 
-Existe uma ferramenta chamada GitHub HTML Preview, que faz exatamente o que desejamos. Para isso, basta anexaremos o trecho "http://htmlpreview.github.io/?" à URL de nosso arquivo HTML para visualizá-lo renderizado de forma mais apresentável. Para facilitar, siga o passo abaixo:
+- Preparação e transformação dos dados
+- Análise exploratória para entender os dados
+- Análise de componentes principais, para auxiliar na identificação de padrões e ajudar a identificar as características que são mais influentes no comportamento dos clientes.
+- Análise de agrupamento usando o algoritmo K-Means, na busca por grupos de clientes com comportamentos, preferências e características semelhantes.
 
-- Para **visualizar** o arquivo **"Customer_Personality_Analysis-EDA.html"** basta **copiar e colar** o seguinte link em seu navegador ou clicar sobre ele: http://htmlpreview.github.io/?https://github.com/Gleynner/Analise-de-Personalidade-de-Clientes---R/blob/main/Customer_Personality_Analysis-EDA.html
+As fases do projeto podem ser visualizadas por meio dos link abaixo:
 
-- Para **visualizar** o arquivo **"Customer_Personality_Analysis-PCA.html"** basta **copiar e colar** o seguinte link em seu navegador ou clicar sobre ele: http://htmlpreview.github.io/?https://github.com/Gleynner/Analise-de-Personalidade-de-Clientes---R/blob/main/Customer_Personality_Analysis-PCA.html
+[Análise Exploratória de Dados](https://bit.ly/3C7dRk5)   
 
-- Para **visualizar** o arquivo **"Customer_Personality_Analysis-K-Means.html"** basta **copiar e colar** o seguinte link em seu navegador ou clicar sobre ele: http://htmlpreview.github.io/?https://github.com/Gleynner/Analise-de-Personalidade-de-Clientes---R/blob/main/Customer_Personality_Analysis-K-Means.html
+[Análise de Componentes Principais](https://bit.ly/3ZVeoh2)   
+
+[Análise de Agrupamento](https://bit.ly/3DHCqok)       
